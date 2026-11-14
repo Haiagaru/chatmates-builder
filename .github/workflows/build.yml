@@ -1,0 +1,107 @@
+name: Build ChatMate's
+
+on:
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Haiagaru release channel
+        type: choice
+        options: [all, stable, prerelease]
+        default: all
+      force:
+        description: Rebuild already published bundles
+        type: boolean
+        default: false
+
+concurrency:
+  group: chatmates-builds
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      has_updates: ${{ steps.plan.outputs.has_updates }}
+      build_matrix: ${{ steps.plan.outputs.build_matrix }}
+      release_matrix: ${{ steps.plan.outputs.release_matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Detect stable and prerelease bundles
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHANNEL: ${{ inputs.channel || 'all' }}
+          FORCE: ${{ inputs.force || false }}
+        run: python scripts/builder.py discover --channel "$CHANNEL"
+
+  build:
+    needs: discover
+    if: needs.discover.outputs.has_updates == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix: ${{ fromJSON(needs.discover.outputs.build_matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Build four Shizuku and MEGA combinations
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_JSON: ${{ toJSON(matrix.release) }}
+          APK_ID: ${{ matrix.apk_id }}
+          CHATMATES_KEYSTORE_BASE64: ${{ secrets.CHATMATES_KEYSTORE_BASE64 }}
+          CHATMATES_KEYSTORE_PASSWORD: ${{ secrets.CHATMATES_KEYSTORE_PASSWORD }}
+        run: python scripts/builder.py build --apk-id "$APK_ID"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk-${{ matrix.release.key }}-${{ matrix.apk_id }}
+          path: out/*
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: logs-${{ matrix.release.key }}-${{ matrix.apk_id }}
+          path: logs/*
+          retention-days: 7
+
+  publish:
+    needs: [discover, build]
+    if: needs.discover.outputs.has_updates == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.discover.outputs.release_matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: apk-${{ matrix.release.key }}-*
+          path: out
+          merge-multiple: true
+      - name: Check all APKs and publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_JSON: ${{ toJSON(matrix.release) }}
+        run: python scripts/builder.py publish

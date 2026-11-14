@@ -1,0 +1,65 @@
+{
+  "upstream": "areteruhiro/Haiagaru-Morphe",
+  "monitor_since": "2026-11-14T06:11:02Z",
+  "app_name": "ChatMate's",
+  "package_name": "io.github.haiagaru.chatmates",
+  "version_code": 2147483647,
+  "signer_sha256": "f069e7c85239f2e07f721e8938282f7ed14c9fb5b5fead0884fb2e9de2cbef60",
+  "source_release": "source-apks",
+  "cli": {
+    "repository": "MorpheApp/morphe-cli",
+    "tag": "v2.1.1",
+    "asset": "morphe-desktop-2.1.1-all.jar",
+    "sha256": "3a2efefd567b44dde15971a58d5aa649a32aba30781d3400dc08d688c720168f"
+  },
+  "patches": {
+    "base": [
+      "Haiagaru",
+      "Change ChMate package name"
+    ],
+    "shizuku": "Migrate ChMate data with Shizuku",
+    "mega": "MEGAバックアップ・同期"
+  },
+  "apks": [
+    {
+      "id": "191",
+      "version": "0.8.10.191 dev",
+      "asset": "chmate-0.8.10.191-dev.apk",
+      "sha256": "1075cd57970099d30478badd064a8a7b64bc53e6ec8029cf5f4e7c1d27e41ec4"
+    },
+    {
+      "id": "226",
+      "version": "0.8.10.226 dev",
+      "asset": "chmate-0.8.10.226-dev.apk",
+      "sha256": "7290a076ec43ed37a7a7376e9240770577dd13b29f50635c4cd1112a0f4dd9c4"
+    },
+    {
+      "id": "242",
+      "version": "0.8.10.242 dev",
+      "asset": "chmate-0.8.10.242-dev.apk",
+      "sha256": "fcbf88b903a040b7cdcc328149607bb4f3c5ef94fb3080e176453335a39e86ec"
+    }
+  ],
+  "variants": [
+    {
+      "id": "plain",
+      "shizuku": false,
+      "mega": false
+    },
+    {
+      "id": "shizuku",
+      "shizuku": true,
+      "mega": false
+    },
+    {
+      "id": "mega",
+      "shizuku": false,
+      "mega": true
+    },
+    {
+      "id": "shizuku-mega",
+      "shizuku": true,
+      "mega": true
+    }
+  ]
+}

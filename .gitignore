@@ -1,0 +1,7 @@
+.work/
+.signing/
+inputs/
+out/
+logs/
+__pycache__/
+*.pyc
