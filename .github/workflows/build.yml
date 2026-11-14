@@ -24,14 +24,14 @@ permissions:
 
 jobs:
   discover:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       has_updates: ${{ steps.plan.outputs.has_updates }}
       build_matrix: ${{ steps.plan.outputs.build_matrix }}
       release_matrix: ${{ steps.plan.outputs.release_matrix }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - name: Detect stable and prerelease bundles
@@ -43,20 +43,21 @@ jobs:
         run: python scripts/builder.py discover --channel "$CHANNEL"
 
   build:
+    name: ChMate ${{ matrix.apk_id }} / Haiagaru ${{ matrix.release.upstream_tag }} (${{ matrix.release.channel }})
     needs: discover
     if: needs.discover.outputs.has_updates == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     strategy:
       fail-fast: false
       max-parallel: 3
       matrix: ${{ fromJSON(needs.discover.outputs.build_matrix) }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
@@ -68,13 +69,13 @@ jobs:
           CHATMATES_KEYSTORE_BASE64: ${{ secrets.CHATMATES_KEYSTORE_BASE64 }}
           CHATMATES_KEYSTORE_PASSWORD: ${{ secrets.CHATMATES_KEYSTORE_PASSWORD }}
         run: python scripts/builder.py build --apk-id "$APK_ID"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: apk-${{ matrix.release.key }}-${{ matrix.apk_id }}
           path: out/*
           if-no-files-found: error
           retention-days: 7
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: failure()
         with:
           name: logs-${{ matrix.release.key }}-${{ matrix.apk_id }}
@@ -82,20 +83,21 @@ jobs:
           retention-days: 7
 
   publish:
+    name: Publish Haiagaru ${{ matrix.release.upstream_tag }} (${{ matrix.release.channel }})
     needs: [discover, build]
     if: needs.discover.outputs.has_updates == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.discover.outputs.release_matrix) }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           pattern: apk-${{ matrix.release.key }}-*
           path: out
