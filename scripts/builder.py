@@ -15,6 +15,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+import urllib.parse
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG = json.loads((ROOT / "chatmates.json").read_text(encoding="utf-8"))
@@ -23,6 +24,7 @@ API = "https://api.github.com"
 WORK = ROOT / ".work"
 OUT = ROOT / "out"
 LOGS = ROOT / "logs"
+ISSUE_WATCH = json.loads((ROOT / "issue-watch.json").read_text(encoding="utf-8"))
 
 
 def sha256(path: Path) -> str:
@@ -65,6 +67,51 @@ def releases(repository: str):
         if len(items) < 100:
             return
         page += 1
+
+
+def api_pages(path: str):
+    separator = "&" if "?" in path else "?"
+    page = 1
+    while True:
+        items = api(f"{path}{separator}per_page=100&page={page}")
+        yield from items
+        if len(items) < 100:
+            return
+        page += 1
+
+
+def issue_requests() -> list[dict]:
+    """Accept only a literal command, never instructions/code from issue content."""
+    repository = ISSUE_WATCH["repository"]
+    since = ISSUE_WATCH["since"]
+    query = urllib.parse.urlencode({"since": since, "sort": "updated", "direction": "asc"})
+    command = ISSUE_WATCH["command"]
+    issues = {}
+    requests = []
+
+    def add(kind: str, item: dict, url: str):
+        key = hashlib.sha256(f"{repository}:{kind}:{item['id']}".encode()).hexdigest()[:16]
+        requests.append({"key": key, "url": url, "updated_at": item["updated_at"]})
+
+    for issue in api_pages(f"/repos/{repository}/issues?state=all&{query}"):
+        issues[issue["number"]] = issue
+        if issue.get("pull_request") or issue["updated_at"] < since:
+            continue
+        if any((issue.get(field) or "").strip() == command for field in ("title", "body")):
+            add("issue", issue, f"https://github.com/{repository}/issues/{issue['number']}")
+    for comment in api_pages(f"/repos/{repository}/issues/comments?{query}"):
+        if comment["updated_at"] < since or (comment.get("body") or "").strip() != command:
+            continue
+        issue_number = int(comment["issue_url"].rsplit("/", 1)[1])
+        issue = issues.get(issue_number)
+        if issue is None:
+            issue = api(f"/repos/{repository}/issues/{issue_number}")
+            issues[issue_number] = issue
+        if issue.get("pull_request"):
+            continue
+        add("comment", comment,
+            f"https://github.com/{repository}/issues/{issue_number}#issuecomment-{comment['id']}")
+    return sorted(requests, key=lambda item: (item["updated_at"], item["key"]))
 
 
 def download(url: str, path: Path, expected: str | None = None) -> Path:
@@ -135,6 +182,8 @@ def discover(channel: str):
     if stable and stable["id"] not in {item["id"] for item in upstream}:
         upstream.append(stable)
     published = {release["tag_name"] for release in releases(REPO) if not release["draft"]}
+    # An issue-request rebuild also satisfies the normal release build.
+    completed_bundles = {re.sub(r"-issue-[0-9a-f]{16}$", "", tag) for tag in published}
     force = os.environ.get("FORCE", "false").lower() == "true"
     suffix = "-run" + os.environ.get("GITHUB_RUN_ID", str(int(time.time()))) if force else ""
     plans = []
@@ -145,8 +194,24 @@ def discover(channel: str):
         if not any(asset["name"].endswith(".mpp") for asset in release["assets"]):
             continue  # A release may be visible before its bundle upload completes.
         plan = release_plan(release, suffix)
-        if force or plan["tag"] not in published:
+        if force or plan["tag"] not in completed_bundles:
             plans.append(plan)
+    candidates = [release for release in upstream
+                  if channel in ("all", "prerelease" if release["prerelease"] else "stable")
+                  and any(asset["name"].endswith(".mpp") for asset in release["assets"])]
+    if candidates:
+        latest = max(candidates, key=lambda item: item["published_at"])
+        for request in issue_requests():
+            suffix = "-issue-" + request["key"]
+            if any(tag.endswith(suffix) for tag in published):
+                continue
+            plan = release_plan(latest, suffix)
+            plan["issue_request"] = request
+            # Avoid building the identical bundle twice on first detection.
+            base_tag = release_plan(latest)["tag"]
+            plans = [item for item in plans if item["tag"] != base_tag]
+            plans.append(plan)
+            print(f"Accepted update request: {request['url']} -> Haiagaru {latest['tag_name']}")
     builds = [{"release": plan, "apk_id": apk["id"]} for plan in plans for apk in CONFIG["apks"]]
     if len(builds) > 256:
         raise RuntimeError("Too many pending releases for one Actions matrix; run smaller channels first")
@@ -275,8 +340,11 @@ def publish():
     checksums = OUT / "SHA256SUMS"
     checksums.write_text("".join(f"{sha256(path)}  {path.name}\n" for path in sorted(expected)), encoding="utf-8")
     notes = OUT / "release-notes.md"
+    trigger_note = (f"Update requested: {plan['issue_request']['url']}\n\n"
+                    if "issue_request" in plan else "")
     notes.write_text(f"# ChatMate's · Haiagaru {plan['upstream_tag']}\n\n"
         f"Upstream: {plan['upstream_url']}\n\nChannel: **{plan['channel']}**\n\n"
+        f"{trigger_note}"
         "ChMate: 0.8.10.191 dev / 0.8.10.226 dev / 0.8.10.242 dev.\n\n"
         "| Variant | Shizuku | MEGA |\n|---|---|---|\n"
         "| plain | OFF | OFF |\n| shizuku | ON | OFF |\n| mega | OFF | ON |\n| shizuku-mega | ON | ON |\n\n"

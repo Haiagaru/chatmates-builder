@@ -40,6 +40,12 @@ GitHub Actions が **5分間隔**で `areteruhiro/Haiagaru-Morphe` の GitHub Re
 
 監視対象は **Haiagaru パッチのリリース**です。ChMate の対象APKは、指定された3ファイルを固定して使用します。
 
+### Issueから更新を要求する
+
+[公開元のIssues](https://github.com/areteruhiro/Haiagaru-Morphe/issues)で、Issueのタイトル・本文、またはコメントに **`更新` の一語だけ**を投稿すると、次の定期確認で最新の配布済みMPPを使って12 APKを再ビルドします。正式版・プレリリースを含め、公開日時が最も新しいものを選びます。前後の空白・改行は無視します。「更新するとクラッシュする」などの文章、Pull Requestとそのコメントは対象外です。
+
+`issue-watch.json` の `since` 以降に作成・編集された投稿が対象です。同じIssueまたはコメントは公開成功後に再実行しません。失敗時は次の確認で再試行します。要求元のURLはReleaseとビルド記録に保存します。投稿への返信・書き込みは行いません。確認間隔は5分で、GitHub側の混雑による遅延があります。
+
 ## 追跡と再現
 
 設定は [`chatmates.json`](chatmates.json)、処理は [`scripts/builder.py`](scripts/builder.py) にあります。Morphe CLI は版と SHA-256 を固定し、元APKも SHA-256 を照合します。Release に `SHA256SUMS` と `build-191.json` / `build-226.json` / `build-242.json` を添付し、パッチ、CLI、元APK、構成、ビルドコミット、署名証明書を記録します。
