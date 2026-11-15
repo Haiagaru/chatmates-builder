@@ -27,7 +27,7 @@ ChMate に [Haiagaru](https://github.com/areteruhiro/Haiagaru-Morphe) を適用�
 
 ## 更新検知
 
-GitHub Actions が **15分間隔**で `areteruhiro/Haiagaru-Morphe` の GitHub Releases を確認します。GitHub 側の混雑で開始が遅れる場合があります。
+GitHub Actions が **5分間隔**で `areteruhiro/Haiagaru-Morphe` の GitHub Releases を確認し、新しい正式版・プレリリースのMPPを検知したら自動ビルドします。GitHub Actionsの定期実行で設定できる最短間隔です。定期実行の開始はGitHub側の混雑で遅れる場合があるため、公開から5分以内の開始を保証するものではありません。
 
 - 初回は最新の正式リリースをビルドします。
 - `chatmates.json` の `monitor_since` 以降に公開された正式版・プレリリースを、それぞれ検知してビルドします。同じ確認間隔内の複数リリースも対象です。
