@@ -9,16 +9,20 @@ ChMate に [Haiagaru](https://github.com/areteruhiro/Haiagaru-Morphe) を適用�
 
 [Releases](https://github.com/Haiagaru/chatmates-builder/releases) から ChMate の版と構成を選びます。
 
-| ファイル末尾 | Shizuku 移行パッチ | MEGA バックアップ・同期 |
-|---|---|---|
-| `plain.apk` | なし | なし |
-| `shizuku.apk` | あり | なし |
-| `mega.apk` | なし | あり |
-| `shizuku-mega.apk` | あり | あり |
+| Variant（ファイル末尾） | Shizuku | MEGA | 画像判定モデル・実行ライブラリ |
+|---|---|---|---|
+| `plain.apk` | なし | なし | なし |
+| `shizuku.apk` | あり | なし | なし |
+| `mega.apk` | なし | あり | なし |
+| `shizuku-mega.apk` | あり | あり | なし |
+| `plain-image-detection.apk` | なし | なし | あり |
+| `shizuku-image-detection.apk` | あり | なし | あり |
+| `mega-image-detection.apk` | なし | あり | あり |
+| `shizuku-mega-image-detection.apk` | あり | あり | あり |
 
 対象は `0.8.10.191 dev`、`0.8.10.226 dev`、`0.8.10.242 dev`。画像判定ライブラリを配布するReleaseでは、各版8構成、計24 APKを生成します。基本パッチは `Haiagaru` と `Change ChMate package name` です。ライブラリを配布しない旧Releaseは従来の計12 APKです。
 
-上の4構成それぞれに、ファイル末尾が `-image-detection.apk` の画像判定あり版を追加します。「成人向け・グロ画像の自動検出」のモデルと実行ライブラリを収録し、191には対応するImage NG修正も含みます。画像判定には **Android 7.0（API 24）以上**が必要で、アプリ内のHaiagaru設定から有効化します。画像判定なし版にはモデルとONNX実行ライブラリを含めません。VPNパッチは今回の追加構成には含めません。
+画像判定あり版のファイル末尾は `-image-detection.apk` です。「成人向け・グロ画像の自動検出」のモデルと実行ライブラリを収録し、191には対応するImage NG修正も含みます。画像判定には **Android 7.0（API 24）以上**が必要で、アプリ内のHaiagaru設定から有効化します。画像判定なし版にはモデルとONNX実行ライブラリを含めません。VPNパッチは今回の追加構成には含めません。
 
 ビルド時は、MPPと**同じRelease**のZIPを毎回取得します。`haiagaru-image-moderation-vpn.zip` があれば画像判定用の内容を使用し、なければ `haiagaru-image-moderation.zip`、一括画像判定ZIPもなければモデル・実行ライブラリ・191用修正の個別ZIPを使用します。取得したZIPのSHA-256を照合し、配布URLとハッシュを `build-*.json` に記録します。必要なファイルが不足していれば公開を止め、次の定期実行で再試行します。
 

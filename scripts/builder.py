@@ -197,6 +197,14 @@ def build_variants(plan: dict) -> list[dict]:
     return base
 
 
+def variant_table(plan: dict) -> str:
+    table = "| Variant | Shizuku | MEGA | Image detection model/runtime |\n|---|---|---|---|\n"
+    for variant in build_variants(plan):
+        values = ["ON" if variant[key] else "OFF" for key in ("shizuku", "mega", "image_detection")]
+        table += f"| {variant['id']} | {' | '.join(values)} |\n"
+    return table + "\n"
+
+
 def prepare_libraries(apk_id: str):
     plan = get_plan()
     options = {}
@@ -454,8 +462,7 @@ def publish():
         f"{trigger_note}"
         f"{library_note}"
         "ChMate: 0.8.10.191 dev / 0.8.10.226 dev / 0.8.10.242 dev.\n\n"
-        "| Variant | Shizuku | MEGA |\n|---|---|---|\n"
-        "| plain | OFF | OFF |\n| shizuku | ON | OFF |\n| mega | OFF | ON |\n| shizuku-mega | ON | ON |\n\n"
+        f"{variant_table(plan)}"
         f"App name: **{CONFIG['app_name']}**  \nPackage: `{CONFIG['package_name']}`  \n"
         f"versionCode: `{CONFIG['version_code']}`  \nSigner SHA-256: `{CONFIG['signer_sha256']}`\n\n"
         "All variants share the package ID and signing certificate. Install one variant at a time. "
