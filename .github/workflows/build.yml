@@ -25,6 +25,9 @@ permissions:
 jobs:
   discover:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      issues: read
     outputs:
       has_updates: ${{ steps.plan.outputs.has_updates }}
       build_matrix: ${{ steps.plan.outputs.build_matrix }}
