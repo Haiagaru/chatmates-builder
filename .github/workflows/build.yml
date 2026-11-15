@@ -75,7 +75,13 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: Build four Shizuku and MEGA combinations
+      - name: Download matching image detection model and runtime
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_JSON: ${{ toJSON(matrix.release) }}
+          APK_ID: ${{ matrix.apk_id }}
+        run: python scripts/builder.py prepare-libraries --apk-id "$APK_ID"
+      - name: Build Shizuku and MEGA combinations with and without image detection
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_JSON: ${{ toJSON(matrix.release) }}

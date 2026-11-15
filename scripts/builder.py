@@ -16,6 +16,7 @@ import time
 import urllib.error
 import urllib.request
 import urllib.parse
+import zipfile
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG = json.loads((ROOT / "chatmates.json").read_text(encoding="utf-8"))
@@ -145,13 +146,78 @@ def release_plan(release: dict, force_suffix: str = "") -> dict:
     channel = "prerelease" if release["prerelease"] else "stable"
     identity = {"config": CONFIG, "id": release["id"], "channel": channel,
                 "asset": {key: asset.get(key) for key in ("id", "size", "updated_at", "digest")}}
+    libraries = select_library_assets(release)
+    if libraries:
+        identity["library_policy"] = 2
+        identity["libraries"] = libraries
     key = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()[:12]
     tag = re.sub(r"[^A-Za-z0-9._-]", "-", release["tag_name"])
     return {"key": f"{release['id']}-{channel}-{key}{force_suffix}",
             "tag": f"haiagaru-{tag}-{channel}-{key}{force_suffix}",
             "upstream_tag": release["tag_name"], "upstream_id": release["id"],
             "upstream_url": release["html_url"], "channel": channel,
-            "published_at": release["published_at"], "asset": asset}
+            "published_at": release["published_at"], "asset": asset, "libraries": libraries}
+
+
+def select_library_assets(release: dict) -> dict:
+    assets = {item["name"]: item for item in release["assets"]}
+    combined = "haiagaru-image-moderation-vpn.zip"
+    moderation = "haiagaru-image-moderation.zip"
+    model = "haiagaru-image-moderation-model.zip"
+    runtime = "haiagaru-image-moderation-runtime.zip"
+    vpn = "haiagaru-image-vpn-v2.zip"
+    if combined in assets:
+        selected = {"imageModerationFile": combined}
+    elif moderation in assets or model in assets or runtime in assets:
+        # Do not silently ship a reduced build while release assets are uploading.
+        selected = ({"imageModerationFile": moderation} if moderation in assets else
+                    {"imageModerationModelFile": model, "imageModerationRuntimeFile": runtime})
+        if moderation not in assets:
+            selected["imageNgLibraryFile"] = "haiagaru-image-ng.zip"
+        missing = set(selected.values()) - assets.keys()
+        if missing:
+            raise RuntimeError(f"{release['tag_name']}: library assets are incomplete: {sorted(missing)}")
+    else:
+        return {}  # Older bundles retain their original build configuration.
+    return {option: {key: assets[name].get(key) for key in
+                    ("name", "id", "size", "updated_at", "digest", "browser_download_url")}
+            for option, name in selected.items()}
+
+
+LIBRARY_PATCHES = {
+    "moderation": "成人向け・グロ画像の自動検出",
+}
+
+
+def build_variants(plan: dict) -> list[dict]:
+    base = [dict(variant, image_detection=False) for variant in CONFIG["variants"]]
+    if plan.get("libraries"):
+        base += [dict(variant, id=variant["id"] + "-image-detection", image_detection=True)
+                 for variant in CONFIG["variants"]]
+    return base
+
+
+def prepare_libraries(apk_id: str):
+    plan = get_plan()
+    options = {}
+    manifest = []
+    seen = {}
+    for option, asset in plan.get("libraries", {}).items():
+        if option == "imageNgLibraryFile" and apk_id != "191":
+            continue
+        expected = asset_digest(asset)
+        if not expected:
+            raise RuntimeError(f"Library asset has no SHA-256 digest: {asset['name']}")
+        path = download(asset["browser_download_url"], WORK / "libraries" / plan["key"] / asset["name"], expected)
+        options[option] = str(path)
+        if asset["name"] not in seen:
+            manifest.append({"name": asset["name"], "sha256": sha256(path),
+                             "url": asset["browser_download_url"]})
+            seen[asset["name"]] = path
+    state = {"release_key": plan["key"], "options": options, "assets": manifest}
+    WORK.mkdir(exist_ok=True)
+    (WORK / f"libraries-{apk_id}.json").write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+    print(f"Prepared {len(manifest)} verified library ZIP(s) for ChMate {apk_id}")
 
 
 def output(name: str, value):
@@ -221,23 +287,30 @@ def discover(channel: str):
     print(f"Pending releases: {len(plans)}; ChMate build jobs: {len(builds)}")
 
 
-def selected_patches(variant: dict) -> list[str]:
+def selected_patches(variant: dict, libraries: dict | None = None) -> list[str]:
     patches = list(CONFIG["patches"]["base"])
     for name in ("shizuku", "mega"):
         if variant[name]:
             patches.append(CONFIG["patches"][name])
+    if libraries:
+        patches.extend(LIBRARY_PATCHES.values())
     return patches
 
 
 def patch_command(cli: Path, bundle: Path, source: Path, target: Path,
-                  key: Path, variant: dict, password: str) -> list[str]:
+                  key: Path, variant: dict, password: str, libraries: dict | None = None) -> list[str]:
     command = ["java", "-Xmx4g", "-jar", str(cli), "patch", str(source),
-               "-p", str(bundle), "--exclusive", "-e", "Haiagaru",
-               "-e", "Change ChMate package name",
+               "-p", str(bundle), "--exclusive", "-e", "Haiagaru"]
+    if libraries and "imageNgLibraryFile" in libraries:
+        command += [f"-OimageNgLibraryFile={libraries['imageNgLibraryFile']}", "-OimageNgTfliteFix=true"]
+    command += ["-e", "Change ChMate package name",
                f"-OpackageName={CONFIG['package_name']}", f"-OappName={CONFIG['app_name']}",
                f"-OversionCode={CONFIG['version_code']}"]
     for name in ("shizuku", "mega"):
         command += ["-e" if variant[name] else "-d", CONFIG["patches"][name]]
+    if libraries:
+        command += ["-e", LIBRARY_PATCHES["moderation"]]
+        command += [f"-O{option}={path}" for option, path in libraries.items() if option.startswith("imageModeration")]
     command += ["-o", str(target), "--keystore", str(key),
                 "--keystore-entry-alias", "chatmates", "--keystore-password", password,
                 "--keystore-entry-password", password,
@@ -264,6 +337,17 @@ def get_plan() -> dict:
 
 def build(apk_id: str):
     plan = get_plan()
+    state_path = WORK / f"libraries-{apk_id}.json"
+    if not state_path.exists():
+        prepare_libraries(apk_id)
+    library_state = json.loads(state_path.read_text(encoding="utf-8"))
+    if library_state["release_key"] != plan["key"]:
+        raise RuntimeError("Prepared libraries belong to a different release")
+    library_options = library_state["options"]
+    for asset in library_state["assets"]:
+        path = WORK / "libraries" / plan["key"] / asset["name"]
+        if sha256(path) != asset["sha256"]:
+            raise RuntimeError("Prepared library checksum mismatch")
     apk = next(item for item in CONFIG["apks"] if item["id"] == apk_id)
     OUT.mkdir(exist_ok=True)
     WORK.mkdir(exist_ok=True)
@@ -297,26 +381,44 @@ def build(apk_id: str):
                           f"{CONFIG['source_release']}/{apk['asset']}", WORK / apk["asset"], apk["sha256"])
     artifacts = []
     file_version = re.sub(r"[^A-Za-z0-9._-]", "-", plan["upstream_tag"])
-    for variant in CONFIG["variants"]:
+    for variant in build_variants(plan):
+        active_libraries = library_options if variant["image_detection"] else {}
         filename = f"ChatMates-{apk_id}-Haiagaru-{file_version}-{variant['id']}.apk"
         target = OUT / filename
-        print(f"Building {filename}: {', '.join(selected_patches(variant))}", flush=True)
-        run_patch(patch_command(cli, bundle, source, target, key, variant, password), LOGS / (target.stem + ".log"))
+        print(f"Building {filename}: {', '.join(selected_patches(variant, active_libraries))}", flush=True)
+        run_patch(patch_command(cli, bundle, source, target, key, variant, password, active_libraries), LOGS / (target.stem + ".log"))
         result = json.loads((LOGS / (target.stem + ".result.json")).read_text(encoding="utf-8"))
         applied = set(result.get("appliedPatches", []))
-        desired = set(selected_patches(variant))
+        desired = set(selected_patches(variant, active_libraries))
         disabled = {CONFIG["patches"][name] for name in ("shizuku", "mega") if not variant[name]}
+        if not variant["image_detection"]:
+            disabled.add(LIBRARY_PATCHES["moderation"])
         if (not result.get("success") or result.get("failedPatches")
                 or not desired.issubset(applied) or disabled.intersection(applied)):
             raise RuntimeError(f"Patch result does not match the requested variant: {filename}")
         if not target.is_file() or target.stat().st_size == 0:
             raise RuntimeError(f"Expected APK was not produced: {target}")
+        with zipfile.ZipFile(target) as archive:
+            if active_libraries:
+                required = ["assets/haiagaru/image-moderation/model.onnx"]
+                required += [f"lib/{abi}/{name}" for abi in ("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
+                             for name in ("libonnxruntime.so", "libonnxruntime4j_jni.so")]
+                if apk_id == "191":
+                    required.append("assets/haiagaru/image-ng-runtime-fixed")
+                for name in required:
+                    if name not in archive.namelist():
+                        raise RuntimeError(f"Required library/model marker missing: {name}")
+            elif "assets/haiagaru/image-moderation/model.onnx" in archive.namelist():
+                raise RuntimeError("Image detection model unexpectedly bundled in a plain variant")
         artifacts.append({"file": filename, "sha256": sha256(target), "variant": variant,
-                          "patches": selected_patches(variant)})
+                          "patches": selected_patches(variant, active_libraries),
+                          "libraries": library_state["assets"] if active_libraries else [],
+                          "image_detection_min_sdk": 24 if active_libraries else None})
     manifest = {"release": plan, "source": apk, "app_name": CONFIG["app_name"],
                 "package_name": CONFIG["package_name"], "version_code": CONFIG["version_code"],
                 "signer_sha256": signer_sha256, "cli": cli_config,
                 "bundle_sha256": sha256(bundle), "artifacts": artifacts,
+                "libraries": library_state["assets"],
                 "builder_commit": os.environ.get("GITHUB_SHA", "local")}
     (OUT / f"build-{apk_id}.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
@@ -328,23 +430,29 @@ def publish():
         manifest = json.loads((OUT / f"build-{apk['id']}.json").read_text(encoding="utf-8"))
         if manifest["release"]["key"] != plan["key"] or manifest["signer_sha256"] != CONFIG["signer_sha256"]:
             raise RuntimeError("Build manifest release or signing certificate mismatch")
-        if {entry["variant"]["id"] for entry in manifest["artifacts"]} != {v["id"] for v in CONFIG["variants"]}:
+        if {entry["variant"]["id"] for entry in manifest["artifacts"]} != {v["id"] for v in build_variants(plan)}:
             raise RuntimeError("Missing build variants")
         for entry in manifest["artifacts"]:
             path = OUT / entry["file"]
             if sha256(path) != entry["sha256"]:
                 raise RuntimeError(f"Built APK checksum mismatch: {path.name}")
             expected.add(path)
-    if len(expected) != len(CONFIG["apks"]) * len(CONFIG["variants"]):
+    if len(expected) != len(CONFIG["apks"]) * len(build_variants(plan)):
         raise RuntimeError("Incomplete APK build set")
     checksums = OUT / "SHA256SUMS"
     checksums.write_text("".join(f"{sha256(path)}  {path.name}\n" for path in sorted(expected)), encoding="utf-8")
     notes = OUT / "release-notes.md"
     trigger_note = (f"Update requested: {plan['issue_request']['url']}\n\n"
                     if "issue_request" in plan else "")
+    library_note = ("Each of the four variants also has an `-image-detection` APK: 24 APKs in total. "
+                    "These additional variants bundle the image detection model/runtime from the same upstream release. "
+                    "ChMate 191 image-detection variants also include the Image NG runtime fix. "
+                    "Image detection requires Android 7.0 (API 24) or newer and is enabled in Haiagaru settings. "
+                    "The original variants do not bundle the model/runtime.\n\n" if plan.get("libraries") else "")
     notes.write_text(f"# ChatMate's · Haiagaru {plan['upstream_tag']}\n\n"
         f"Upstream: {plan['upstream_url']}\n\nChannel: **{plan['channel']}**\n\n"
         f"{trigger_note}"
+        f"{library_note}"
         "ChMate: 0.8.10.191 dev / 0.8.10.226 dev / 0.8.10.242 dev.\n\n"
         "| Variant | Shizuku | MEGA |\n|---|---|---|\n"
         "| plain | OFF | OFF |\n| shizuku | ON | OFF |\n| mega | OFF | ON |\n| shizuku-mega | ON | ON |\n\n"
@@ -379,16 +487,16 @@ def publish():
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("discover", "build", "publish"))
+    parser.add_argument("command", choices=("discover", "prepare-libraries", "build", "publish"))
     parser.add_argument("--channel", choices=("all", "stable", "prerelease"), default="all")
     parser.add_argument("--apk-id", choices=[apk["id"] for apk in CONFIG["apks"]])
     args = parser.parse_args()
     if args.command == "discover":
         discover(args.channel)
-    elif args.command == "build":
+    elif args.command in ("build", "prepare-libraries"):
         if not args.apk_id:
             parser.error("build requires --apk-id")
-        build(args.apk_id)
+        (build if args.command == "build" else prepare_libraries)(args.apk_id)
     else:
         publish()
 

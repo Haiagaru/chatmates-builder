@@ -16,14 +16,18 @@ ChMate に [Haiagaru](https://github.com/areteruhiro/Haiagaru-Morphe) を適用�
 | `mega.apk` | なし | あり |
 | `shizuku-mega.apk` | あり | あり |
 
-対象は `0.8.10.191 dev`、`0.8.10.226 dev`、`0.8.10.242 dev`。1つの Haiagaru リリースから計12 APKを生成します。基本パッチは `Haiagaru` と `Change ChMate package name` です。その他の任意パッチは追加しません。
+対象は `0.8.10.191 dev`、`0.8.10.226 dev`、`0.8.10.242 dev`。画像判定ライブラリを配布するReleaseでは、各版8構成、計24 APKを生成します。基本パッチは `Haiagaru` と `Change ChMate package name` です。ライブラリを配布しない旧Releaseは従来の計12 APKです。
+
+上の4構成それぞれに、ファイル末尾が `-image-detection.apk` の画像判定あり版を追加します。「成人向け・グロ画像の自動検出」のモデルと実行ライブラリを収録し、191には対応するImage NG修正も含みます。画像判定には **Android 7.0（API 24）以上**が必要で、アプリ内のHaiagaru設定から有効化します。画像判定なし版にはモデルとONNX実行ライブラリを含めません。VPNパッチは今回の追加構成には含めません。
+
+ビルド時は、MPPと**同じRelease**のZIPを毎回取得します。`haiagaru-image-moderation-vpn.zip` があれば画像判定用の内容を使用し、なければ `haiagaru-image-moderation.zip`、一括画像判定ZIPもなければモデル・実行ライブラリ・191用修正の個別ZIPを使用します。取得したZIPのSHA-256を照合し、配布URLとハッシュを `build-*.json` に記録します。必要なファイルが不足していれば公開を止め、次の定期実行で再試行します。
 
 - アプリ表示名: **ChatMate's**
 - Android パッケージID: `io.github.haiagaru.chatmates`
 - versionCode: `2147483647`（上流パッチの既定値。対応する ChMate 版と構成の切り替えに使用）
 - 全構成で共通の、このリポジトリ専用の署名鍵を使用
 
-`ChatMate's` はアポストロフィを含むため Android パッケージIDには使えず、表示名として設定します。12 APKは同じパッケージIDを持つため、同時にインストールするのは1つです。元の ChMate とは別アプリとして共存できます。Shizuku または MEGA を含む構成は Android 7.0 以降が必要です。
+`ChatMate's` はアポストロフィを含むため Android パッケージIDには使えず、表示名として設定します。全APKは同じパッケージIDを持つため、同時にインストールするのは1つです。元の ChMate とは別アプリとして共存できます。Shizuku または MEGA を含む構成は Android 7.0 以降が必要です。
 
 ## 更新検知
 
@@ -33,7 +37,7 @@ GitHub Actions が **5分間隔**で `areteruhiro/Haiagaru-Morphe` の GitHub Re
 - `chatmates.json` の `monitor_since` 以降に公開された正式版・プレリリースを、それぞれ検知してビルドします。同じ確認間隔内の複数リリースも対象です。
 - Release 公開後に MPP がアップロードされた場合も、次回確認で対象にします。
 - パッチ配布ファイルの差し替え、構成変更も識別し、既に成功・公開した同じ構成は再ビルドしません。
-- 12 APK がすべて成功した場合に Release を公開します。途中の失敗は次回確認で再試行します。プレリリースは出力側も Pre-release とします。
+- 対象の全APK（画像判定対応版は24 APK）が成功した場合に Release を公開します。途中の失敗は次回確認で再試行します。プレリリースは出力側も Pre-release とします。
 - 未完成の Draft、MPP のない Release はビルドしません。
 
 [Actions](https://github.com/Haiagaru/chatmates-builder/actions/workflows/build.yml) → **Run workflow** から手動実行できます。`channel` は `all` / `stable` / `prerelease`、`force` で公開済みの構成も作り直せます。
@@ -42,7 +46,7 @@ GitHub Actions が **5分間隔**で `areteruhiro/Haiagaru-Morphe` の GitHub Re
 
 ### Issueから更新を要求する
 
-[このリポジトリのIssues](https://github.com/Haiagaru/chatmates-builder/issues)で、Issueのタイトル・本文、またはコメントに **`更新` の一語だけ**を投稿すると、投稿イベントで直接ワークフローを起動し、最新の配布済みMPPを使って12 APKを再ビルドします。定期確認を待つ必要はありません。編集による「更新」の入力にも対応します。パッチの取得元は `areteruhiro/Haiagaru-Morphe` です。正式版・プレリリースを含め、公開日時が最も新しいものを選びます。「更新するとクラッシュする」などの文章、Pull Requestとそのコメントは対象外です。前後に空白・改行がある投稿は定期確認で検知します。
+[このリポジトリのIssues](https://github.com/Haiagaru/chatmates-builder/issues)で、Issueのタイトル・本文、またはコメントに **`更新` の一語だけ**を投稿すると、投稿イベントで直接ワークフローを起動し、最新の配布済みMPPを使って全構成を再ビルドします。定期確認を待つ必要はありません。編集による「更新」の入力にも対応します。パッチの取得元は `areteruhiro/Haiagaru-Morphe` です。正式版・プレリリースを含め、公開日時が最も新しいものを選びます。「更新するとクラッシュする」などの文章、Pull Requestとそのコメントは対象外です。前後に空白・改行がある投稿は定期確認で検知します。
 
 `issue-watch.json` の `since` 以降に作成・編集された投稿が対象です。同じIssueまたはコメントは公開成功後に再実行しません。失敗時は次の確認で再試行します。要求元のURLはReleaseとビルド記録に保存します。投稿への返信・書き込みは行いません。定期確認は5分間隔で設定していますが、GitHub側のスケジュール遅延により、実際には数十分以上空く場合もあります。投稿イベントにもランナー待ちが発生する場合があります。
 
