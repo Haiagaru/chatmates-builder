@@ -9,18 +9,26 @@ ChMate に [Haiagaru](https://github.com/areteruhiro/Haiagaru-Morphe) を適用�
 
 [Releases](https://github.com/Haiagaru/chatmates-builder/releases) から ChMate の版と構成を選びます。
 
-| Variant（ファイル末尾） | Shizuku | MEGA | 画像判定モデル・実行ライブラリ |
-|---|---|---|---|
-| `plain.apk` | なし | なし | なし |
-| `shizuku.apk` | あり | なし | なし |
-| `mega.apk` | なし | あり | なし |
-| `shizuku-mega.apk` | あり | あり | なし |
-| `plain-image-detection.apk` | なし | なし | あり |
-| `shizuku-image-detection.apk` | あり | なし | あり |
-| `mega-image-detection.apk` | なし | あり | あり |
-| `shizuku-mega-image-detection.apk` | あり | あり | あり |
+| Variant（ファイル末尾） | Shizuku | MEGA | 画像判定モデル・実行ライブラリ | 動画専用ビューア | クラッシュログ |
+|---|---|---|---|---|---|
+| `plain.apk` | なし | なし | なし | なし | あり |
+| `shizuku.apk` | あり | なし | なし | なし | あり |
+| `mega.apk` | なし | あり | なし | なし | あり |
+| `shizuku-mega.apk` | あり | あり | なし | なし | あり |
+| `plain-image-detection.apk` | なし | なし | あり | なし | あり |
+| `shizuku-image-detection.apk` | あり | なし | あり | なし | あり |
+| `mega-image-detection.apk` | なし | あり | あり | なし | あり |
+| `shizuku-mega-image-detection.apk` | あり | あり | あり | なし | あり |
+| `plain-video-viewer.apk` | なし | なし | なし | あり | あり |
+| `shizuku-video-viewer.apk` | あり | なし | なし | あり | あり |
+| `mega-video-viewer.apk` | なし | あり | なし | あり | あり |
+| `shizuku-mega-video-viewer.apk` | あり | あり | なし | あり | あり |
+| `plain-image-detection-video-viewer.apk` | なし | なし | あり | あり | あり |
+| `shizuku-image-detection-video-viewer.apk` | あり | なし | あり | あり | あり |
+| `mega-image-detection-video-viewer.apk` | なし | あり | あり | あり | あり |
+| `shizuku-mega-image-detection-video-viewer.apk` | あり | あり | あり | あり | あり |
 
-対象は `0.8.10.191 dev`、`0.8.10.226 dev`、`0.8.10.242 dev`。画像判定ライブラリを配布するReleaseでは、各版8構成、計24 APKを生成します。基本パッチは `Haiagaru` と `Change ChMate package name` です。ライブラリを配布しない旧Releaseは従来の計12 APKです。
+対象は `0.8.10.191 dev`、`0.8.10.226 dev`、`0.8.10.242 dev`。画像判定ライブラリを配布するReleaseでは、各版16構成、計48 APKを生成します。基本パッチは `Haiagaru`、`Change ChMate package name`、`Save ChMate crash logs` です。全APKで未処理例外のログを `Download/Haiagaru` に保存します。ライブラリを配布しない旧Releaseは画像判定なしの計24 APKです。
 
 画像判定あり版のファイル末尾は `-image-detection.apk` です。「成人向け・グロ画像の自動検出」のモデルと実行ライブラリを収録し、191には対応するImage NG修正も含みます。画像判定には **Android 7.0（API 24）以上**が必要で、アプリ内のHaiagaru設定から有効化します。画像判定なし版にはモデルとONNX実行ライブラリを含めません。VPNパッチは今回の追加構成には含めません。
 
@@ -33,6 +41,8 @@ ChMate に [Haiagaru](https://github.com/areteruhiro/Haiagaru-Morphe) を適用�
 
 `ChatMate's` はアポストロフィを含むため Android パッケージIDには使えず、表示名として設定します。全APKは同じパッケージIDを持つため、同時にインストールするのは1つです。元の ChMate とは別アプリとして共存できます。Shizuku または MEGA を含む構成は Android 7.0 以降が必要です。
 
+動画専用ビューアあり版の末尾は `-video-viewer.apk` です。画像判定あり・なしの各構成に用意します。導入後もHaiagaru設定から動画専用ビューアをオン／オフできます。
+
 ## 更新検知
 
 GitHub Actions が **5分間隔**で `areteruhiro/Haiagaru-Morphe` の GitHub Releases を確認し、新しい正式版・プレリリースのMPPを検知したら自動ビルドします。GitHub Actionsの定期実行で設定できる最短間隔です。定期実行の開始はGitHub側の混雑で遅れる場合があるため、公開から5分以内の開始を保証するものではありません。
@@ -41,7 +51,7 @@ GitHub Actions が **5分間隔**で `areteruhiro/Haiagaru-Morphe` の GitHub Re
 - `chatmates.json` の `monitor_since` 以降に公開された正式版・プレリリースを、それぞれ検知してビルドします。同じ確認間隔内の複数リリースも対象です。
 - Release 公開後に MPP がアップロードされた場合も、次回確認で対象にします。
 - パッチ配布ファイルの差し替え、構成変更も識別し、既に成功・公開した同じ構成は再ビルドしません。
-- 対象の全APK（画像判定対応版は24 APK）が成功した場合に Release を公開します。途中の失敗は次回確認で再試行します。プレリリースは出力側も Pre-release とします。
+- 対象の全APK（画像判定対応版は48 APK）が成功した場合に Release を公開します。途中の失敗は次回確認で再試行します。プレリリースは出力側も Pre-release とします。
 - 未完成の Draft、MPP のない Release はビルドしません。
 
 [Actions](https://github.com/Haiagaru/chatmates-builder/actions/workflows/build.yml) → **Run workflow** から手動実行できます。`channel` は `all` / `stable` / `prerelease`、`force` で公開済みの構成も作り直せます。

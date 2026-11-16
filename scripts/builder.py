@@ -194,14 +194,15 @@ def build_variants(plan: dict) -> list[dict]:
     if plan.get("libraries"):
         base += [dict(variant, id=variant["id"] + "-image-detection", image_detection=True)
                  for variant in CONFIG["variants"]]
-    return base
+    return [dict(variant, video_viewer=False) for variant in base] + [
+        dict(variant, id=variant["id"] + "-video-viewer", video_viewer=True) for variant in base]
 
 
 def variant_table(plan: dict) -> str:
-    table = "| Variant | Shizuku | MEGA | Image detection model/runtime |\n|---|---|---|---|\n"
+    table = "| Variant | Shizuku | MEGA | Image detection model/runtime | Dedicated video viewer | Crash logs |\n|---|---|---|---|---|---|\n"
     for variant in build_variants(plan):
-        values = ["ON" if variant[key] else "OFF" for key in ("shizuku", "mega", "image_detection")]
-        table += f"| {variant['id']} | {' | '.join(values)} |\n"
+        values = ["ON" if variant[key] else "OFF" for key in ("shizuku", "mega", "image_detection", "video_viewer")]
+        table += f"| {variant['id']} | {' | '.join(values)} | ON |\n"
     return table + "\n"
 
 
@@ -261,6 +262,7 @@ def discover(channel: str):
     force = os.environ.get("FORCE", "false").lower() == "true"
     suffix = "-run" + os.environ.get("GITHUB_RUN_ID", str(int(time.time()))) if force else ""
     plans = []
+    newest = max((item["published_at"] for item in upstream), default="")
     for release in sorted(upstream, key=lambda item: item["published_at"]):
         kind = "prerelease" if release["prerelease"] else "stable"
         if channel not in ("all", kind):
@@ -268,6 +270,12 @@ def discover(channel: str):
         if not any(asset["name"].endswith(".mpp") for asset in release["assets"]):
             continue  # A release may be visible before its bundle upload completes.
         plan = release_plan(release, suffix)
+        # Configuration upgrades rebuild the newest bundle. Preserve historical
+        # releases instead of recreating every old version under the new policy.
+        version_prefix = f"haiagaru-{re.sub(r'[^A-Za-z0-9._-]', '-', release['tag_name'])}-{kind}-"
+        if (not force and release["published_at"] < newest
+                and any(tag.startswith(version_prefix) for tag in published)):
+            continue
         if force or plan["tag"] not in completed_bundles:
             plans.append(plan)
     candidates = [release for release in upstream
@@ -297,7 +305,7 @@ def discover(channel: str):
 
 def selected_patches(variant: dict, libraries: dict | None = None) -> list[str]:
     patches = list(CONFIG["patches"]["base"])
-    for name in ("shizuku", "mega"):
+    for name in ("shizuku", "mega", "video_viewer"):
         if variant[name]:
             patches.append(CONFIG["patches"][name])
     if libraries:
@@ -314,7 +322,8 @@ def patch_command(cli: Path, bundle: Path, source: Path, target: Path,
     command += ["-e", "Change ChMate package name",
                f"-OpackageName={CONFIG['package_name']}", f"-OappName={CONFIG['app_name']}",
                f"-OversionCode={CONFIG['version_code']}"]
-    for name in ("shizuku", "mega"):
+    command += ["-e", "Save ChMate crash logs"]
+    for name in ("shizuku", "mega", "video_viewer"):
         command += ["-e" if variant[name] else "-d", CONFIG["patches"][name]]
     if libraries:
         command += ["-e", LIBRARY_PATCHES["moderation"]]
@@ -398,7 +407,7 @@ def build(apk_id: str):
         result = json.loads((LOGS / (target.stem + ".result.json")).read_text(encoding="utf-8"))
         applied = set(result.get("appliedPatches", []))
         desired = set(selected_patches(variant, active_libraries))
-        disabled = {CONFIG["patches"][name] for name in ("shizuku", "mega") if not variant[name]}
+        disabled = {CONFIG["patches"][name] for name in ("shizuku", "mega", "video_viewer") if not variant[name]}
         if not variant["image_detection"]:
             disabled.add(LIBRARY_PATCHES["moderation"])
         if (not result.get("success") or result.get("failedPatches")
@@ -452,7 +461,7 @@ def publish():
     notes = OUT / "release-notes.md"
     trigger_note = (f"Update requested: {plan['issue_request']['url']}\n\n"
                     if "issue_request" in plan else "")
-    library_note = ("Each of the four variants also has an `-image-detection` APK: 24 APKs in total. "
+    library_note = ("Image detection variants have `image-detection` in their filename. "
                     "These additional variants bundle the image detection model/runtime from the same upstream release. "
                     "ChMate 191 image-detection variants also include the Image NG runtime fix. "
                     "Image detection requires Android 7.0 (API 24) or newer and is enabled in Haiagaru settings. "
@@ -461,6 +470,9 @@ def publish():
         f"Upstream: {plan['upstream_url']}\n\nChannel: **{plan['channel']}**\n\n"
         f"{trigger_note}"
         f"{library_note}"
+        "Crash logging is enabled in every APK (Download/Haiagaru). "
+        "Variants ending in `-video-viewer.apk` include the dedicated video viewer; other variants do not. "
+        f"This release contains {len(CONFIG['apks']) * len(build_variants(plan))} APKs.\n\n"
         "ChMate: 0.8.10.191 dev / 0.8.10.226 dev / 0.8.10.242 dev.\n\n"
         f"{variant_table(plan)}"
         f"App name: **{CONFIG['app_name']}**  \nPackage: `{CONFIG['package_name']}`  \n"

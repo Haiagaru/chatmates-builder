@@ -15,10 +15,12 @@
   "patches": {
     "base": [
       "Haiagaru",
-      "Change ChMate package name"
+      "Change ChMate package name",
+      "Save ChMate crash logs"
     ],
     "shizuku": "Migrate ChMate data with Shizuku",
-    "mega": "MEGAバックアップ・同期"
+    "mega": "MEGAバックアップ・同期",
+    "video_viewer": "動画専用ビューア"
   },
   "apks": [
     {
