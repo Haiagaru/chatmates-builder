@@ -4,6 +4,7 @@
   "app_name": "ChatMate's",
   "package_name": "io.github.haiagaru.chatmates",
   "version_code": 2147483647,
+  "crash_logs_integrated_since": "1.49.0",
   "signer_sha256": "f069e7c85239f2e07f721e8938282f7ed14c9fb5b5fead0884fb2e9de2cbef60",
   "source_release": "source-apks",
   "cli": {
@@ -15,8 +16,7 @@
   "patches": {
     "base": [
       "Haiagaru",
-      "Change ChMate package name",
-      "Save ChMate crash logs"
+      "Change ChMate package name"
     ],
     "shizuku": "Migrate ChMate data with Shizuku",
     "mega": "MEGAバックアップ・同期",

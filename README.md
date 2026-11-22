@@ -28,7 +28,7 @@ ChMate に [Haiagaru](https://github.com/areteruhiro/Haiagaru-Morphe) を適用�
 | `mega-image-detection-video-viewer.apk` | なし | あり | あり | あり | あり |
 | `shizuku-mega-image-detection-video-viewer.apk` | あり | あり | あり | あり | あり |
 
-対象は `0.8.10.191 dev`、`0.8.10.226 dev`、`0.8.10.242 dev`。画像判定ライブラリを配布するReleaseでは、各版16構成、計48 APKを生成します。基本パッチは `Haiagaru`、`Change ChMate package name`、`Save ChMate crash logs` です。全APKで未処理例外のログを `Download/Haiagaru` に保存します。ライブラリを配布しない旧Releaseは画像判定なしの計24 APKです。
+対象は `0.8.10.191 dev`、`0.8.10.226 dev`、`0.8.10.242 dev`。画像判定ライブラリを配布するReleaseでは、各版16構成、計48 APKを生成します。クラッシュログ保存は全APKで有効です。Haiagaru 1.49.0以降はメインPatchに統合され、それ以前の版では個別Patchを有効化します。クラッシュ・ANRログの送信はアプリ内の同意設定に従います。ライブラリを配布しない旧Releaseは画像判定なしの計24 APKです。
 
 画像判定あり版のファイル末尾は `-image-detection.apk` です。「成人向け・グロ画像の自動検出」のモデルと実行ライブラリを収録し、191には対応するImage NG修正も含みます。画像判定には **Android 7.0（API 24）以上**が必要で、アプリ内のHaiagaru設定から有効化します。画像判定なし版にはモデルとONNX実行ライブラリを含めません。VPNパッチは今回の追加構成には含めません。
 

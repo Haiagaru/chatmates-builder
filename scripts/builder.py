@@ -313,8 +313,27 @@ def selected_patches(variant: dict, libraries: dict | None = None) -> list[str]:
     return patches
 
 
+def bundle_patch_names(cli: Path, bundle: Path) -> set[str]:
+    result = subprocess.check_output([
+        "java", "-Dfile.encoding=UTF-8", "-jar", str(cli), "list-patches",
+        "--patches", str(bundle)
+    ], text=True, encoding="utf-8", errors="replace", cwd=ROOT)
+    return {line.removeprefix("Name: ").strip() for line in result.splitlines()
+            if line.startswith("Name: ")}
+
+
+def version_at_least(tag: str, minimum: str) -> bool:
+    def version(value: str) -> tuple[int, ...]:
+        match = re.match(r"^v?(\d+(?:\.\d+){0,2})", value)
+        if not match:
+            raise RuntimeError(f"Cannot parse upstream version: {value}")
+        return tuple(int(part) for part in match.group(1).split("."))
+    return version(tag) >= version(minimum)
+
+
 def patch_command(cli: Path, bundle: Path, source: Path, target: Path,
-                  key: Path, variant: dict, password: str, libraries: dict | None = None) -> list[str]:
+                  key: Path, variant: dict, password: str, libraries: dict | None = None,
+                  crash_log_patch: bool = False) -> list[str]:
     command = ["java", "-Xmx4g", "-jar", str(cli), "patch", str(source),
                "-p", str(bundle), "--exclusive", "-e", "Haiagaru"]
     if libraries and "imageNgLibraryFile" in libraries:
@@ -322,7 +341,8 @@ def patch_command(cli: Path, bundle: Path, source: Path, target: Path,
     command += ["-e", "Change ChMate package name",
                f"-OpackageName={CONFIG['package_name']}", f"-OappName={CONFIG['app_name']}",
                f"-OversionCode={CONFIG['version_code']}"]
-    command += ["-e", "Save ChMate crash logs"]
+    if crash_log_patch:
+        command += ["-e", "Save ChMate crash logs"]
     for name in ("shizuku", "mega", "video_viewer"):
         command += ["-e" if variant[name] else "-d", CONFIG["patches"][name]]
     if libraries:
@@ -388,6 +408,11 @@ def build(apk_id: str):
                    f"{cli_config['tag']}/{cli_config['asset']}", WORK / cli_config["asset"], cli_config["sha256"])
     bundle = download(plan["asset"]["browser_download_url"], WORK / (plan["key"] + ".mpp"),
                       asset_digest(plan["asset"]))
+    available_patches = bundle_patch_names(cli, bundle)
+    crash_log_patch = "Save ChMate crash logs" in available_patches
+    if (not crash_log_patch and not version_at_least(
+            plan["upstream_tag"], CONFIG["crash_logs_integrated_since"])):
+        raise RuntimeError("Crash log patch is missing before its documented integration version")
     # Local original APKs can be used without publishing them first.
     source = ROOT / "inputs" / apk["asset"]
     if source.exists():
@@ -402,11 +427,15 @@ def build(apk_id: str):
         active_libraries = library_options if variant["image_detection"] else {}
         filename = f"ChatMates-{apk_id}-Haiagaru-{file_version}-{variant['id']}.apk"
         target = OUT / filename
-        print(f"Building {filename}: {', '.join(selected_patches(variant, active_libraries))}", flush=True)
-        run_patch(patch_command(cli, bundle, source, target, key, variant, password, active_libraries), LOGS / (target.stem + ".log"))
+        expected_patches = selected_patches(variant, active_libraries)
+        if crash_log_patch:
+            expected_patches.append("Save ChMate crash logs")
+        print(f"Building {filename}: {', '.join(expected_patches)}", flush=True)
+        run_patch(patch_command(cli, bundle, source, target, key, variant, password,
+                                active_libraries, crash_log_patch), LOGS / (target.stem + ".log"))
         result = json.loads((LOGS / (target.stem + ".result.json")).read_text(encoding="utf-8"))
         applied = set(result.get("appliedPatches", []))
-        desired = set(selected_patches(variant, active_libraries))
+        desired = set(expected_patches)
         disabled = {CONFIG["patches"][name] for name in ("shizuku", "mega", "video_viewer") if not variant[name]}
         if not variant["image_detection"]:
             disabled.add(LIBRARY_PATCHES["moderation"])
@@ -428,7 +457,7 @@ def build(apk_id: str):
             elif "assets/haiagaru/image-moderation/model.onnx" in archive.namelist():
                 raise RuntimeError("Image detection model unexpectedly bundled in a plain variant")
         artifacts.append({"file": filename, "sha256": sha256(target), "variant": variant,
-                          "patches": selected_patches(variant, active_libraries),
+                          "patches": expected_patches,
                           "libraries": library_state["assets"] if active_libraries else [],
                           "image_detection_min_sdk": 24 if active_libraries else None})
     manifest = {"release": plan, "source": apk, "app_name": CONFIG["app_name"],
@@ -470,7 +499,7 @@ def publish():
         f"Upstream: {plan['upstream_url']}\n\nChannel: **{plan['channel']}**\n\n"
         f"{trigger_note}"
         f"{library_note}"
-        "Crash logging is enabled in every APK (Download/Haiagaru). "
+        "Crash log saving is included in every APK (Download/Haiagaru); crash/ANR log sending follows the in-app consent setting. "
         "Variants ending in `-video-viewer.apk` include the dedicated video viewer; other variants do not. "
         f"This release contains {len(CONFIG['apks']) * len(build_variants(plan))} APKs.\n\n"
         "ChMate: 0.8.10.191 dev / 0.8.10.226 dev / 0.8.10.242 dev.\n\n"
