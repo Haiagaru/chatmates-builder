@@ -41,7 +41,7 @@ ChMate に [Haiagaru](https://github.com/areteruhiro/Haiagaru-Morphe) を適用�
 
 `ChatMate's` はアポストロフィを含むため Android パッケージIDには使えず、表示名として設定します。全APKは同じパッケージIDを持つため、同時にインストールするのは1つです。元の ChMate とは別アプリとして共存できます。Shizuku または MEGA を含む構成は Android 7.0 以降が必要です。
 
-動画専用ビューアあり版の末尾は `-video-viewer.apk` です。画像判定あり・なしの各構成に用意します。導入後もHaiagaru設定から動画専用ビューアをオン／オフできます。
+動画専用ビューアあり版の末尾は `-video-viewer.apk` です。画像判定あり・なしの各構成に用意します。導入後もHaiagaru設定から動画専用ビューアをオン／オフできます。必死チェッカー専用ビューアはHaiagaruのメインパッチに含まれ、アプリ内設定でON／OFFを切り替えます。OFFの場合はChMateのWeb表示で開きます。
 
 ## 更新検知
 
