@@ -272,6 +272,9 @@ def discover(channel: str):
             continue
         if not any(asset["name"].endswith(".mpp") for asset in release["assets"]):
             continue  # A release may be visible before its bundle upload completes.
+        if not {"haiagaru-image-moderation-vpn.zip", "haiagaru-image-ng.zip"}.issubset(
+                {asset["name"] for asset in release["assets"]}):
+            continue
         plan = release_plan(release, suffix)
         # Configuration upgrades rebuild the newest bundle. Preserve historical
         # releases instead of recreating every old version under the new policy.
@@ -283,7 +286,9 @@ def discover(channel: str):
             plans.append(plan)
     candidates = [release for release in upstream
                   if channel in ("all", "prerelease" if release["prerelease"] else "stable")
-                  and any(asset["name"].endswith(".mpp") for asset in release["assets"])]
+                  and any(asset["name"].endswith(".mpp") for asset in release["assets"])
+                  and {"haiagaru-image-moderation-vpn.zip", "haiagaru-image-ng.zip"}.issubset(
+                      {asset["name"] for asset in release["assets"]})]
     if candidates:
         latest = max(candidates, key=lambda item: item["published_at"])
         for request in issue_requests():
