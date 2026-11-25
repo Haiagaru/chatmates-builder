@@ -167,18 +167,22 @@ def select_library_assets(release: dict) -> dict:
     runtime = "haiagaru-image-moderation-runtime.zip"
     vpn = "haiagaru-image-vpn-v2.zip"
     if combined in assets:
-        selected = {"imageModerationFile": combined}
+        selected = {"imageModerationFile": combined, "imageVpnLibraryFile": combined}
     elif moderation in assets or model in assets or runtime in assets:
         # Do not silently ship a reduced build while release assets are uploading.
         selected = ({"imageModerationFile": moderation} if moderation in assets else
                     {"imageModerationModelFile": model, "imageModerationRuntimeFile": runtime})
-        if moderation not in assets:
-            selected["imageNgLibraryFile"] = "haiagaru-image-ng.zip"
+        selected["imageVpnLibraryFile"] = vpn
         missing = set(selected.values()) - assets.keys()
         if missing:
             raise RuntimeError(f"{release['tag_name']}: library assets are incomplete: {sorted(missing)}")
     else:
-        return {}  # Older bundles retain their original build configuration.
+        raise RuntimeError(f"{release['tag_name']}: required library assets are unavailable")
+    if "imageNgLibraryFile" not in selected:
+        selected["imageNgLibraryFile"] = "haiagaru-image-ng.zip"
+    missing = set(selected.values()) - assets.keys()
+    if missing:
+        raise RuntimeError(f"{release['tag_name']}: library assets are incomplete: {sorted(missing)}")
     return {option: {key: assets[name].get(key) for key in
                     ("name", "id", "size", "updated_at", "digest", "browser_download_url")}
             for option, name in selected.items()}
@@ -186,22 +190,21 @@ def select_library_assets(release: dict) -> dict:
 
 LIBRARY_PATCHES = {
     "moderation": "成人向け・グロ画像の自動検出",
+    "vpn": "画像取得専用VPN（追加用・有効切替）",
 }
 
 
 def build_variants(plan: dict) -> list[dict]:
-    base = [dict(variant, image_detection=False) for variant in CONFIG["variants"]]
-    if plan.get("libraries"):
-        base += [dict(variant, id=variant["id"] + "-image-detection", image_detection=True)
-                 for variant in CONFIG["variants"]]
-    return [dict(variant, video_viewer=False) for variant in base] + [
-        dict(variant, id=variant["id"] + "-video-viewer", video_viewer=True) for variant in base]
+    if not plan.get("libraries"):
+        raise RuntimeError("All-library variants require matching upstream assets")
+    return [{"id": "all-enabled", "shizuku": True, "mega": True,
+             "image_detection": True, "image_vpn": True, "video_viewer": True}]
 
 
 def variant_table(plan: dict) -> str:
-    table = "| Variant | Shizuku | MEGA | Image detection model/runtime | Dedicated video viewer | Crash logs |\n|---|---|---|---|---|---|\n"
+    table = "| Variant | Shizuku | MEGA | Image detection | Image VPN | Dedicated video viewer | Crash logs |\n|---|---|---|---|---|---|---|\n"
     for variant in build_variants(plan):
-        values = ["ON" if variant[key] else "OFF" for key in ("shizuku", "mega", "image_detection", "video_viewer")]
+        values = ["ON" if variant[key] else "OFF" for key in ("shizuku", "mega", "image_detection", "image_vpn", "video_viewer")]
         table += f"| {variant['id']} | {' | '.join(values)} | ON |\n"
     return table + "\n"
 
@@ -348,6 +351,8 @@ def patch_command(cli: Path, bundle: Path, source: Path, target: Path,
     if libraries:
         command += ["-e", LIBRARY_PATCHES["moderation"]]
         command += [f"-O{option}={path}" for option, path in libraries.items() if option.startswith("imageModeration")]
+        command += ["-e", LIBRARY_PATCHES["vpn"],
+                    f"-OimageVpnLibraryFile={libraries['imageVpnLibraryFile']}"]
     command += ["-o", str(target), "--keystore", str(key),
                 "--keystore-entry-alias", "chatmates", "--keystore-password", password,
                 "--keystore-entry-password", password,
@@ -424,7 +429,7 @@ def build(apk_id: str):
     artifacts = []
     file_version = re.sub(r"[^A-Za-z0-9._-]", "-", plan["upstream_tag"])
     for variant in build_variants(plan):
-        active_libraries = library_options if variant["image_detection"] else {}
+        active_libraries = library_options
         filename = f"ChatMates-{apk_id}-Haiagaru-{file_version}-{variant['id']}.apk"
         target = OUT / filename
         expected_patches = selected_patches(variant, active_libraries)
@@ -437,8 +442,6 @@ def build(apk_id: str):
         applied = set(result.get("appliedPatches", []))
         desired = set(expected_patches)
         disabled = {CONFIG["patches"][name] for name in ("shizuku", "mega", "video_viewer") if not variant[name]}
-        if not variant["image_detection"]:
-            disabled.add(LIBRARY_PATCHES["moderation"])
         if (not result.get("success") or result.get("failedPatches")
                 or not desired.issubset(applied) or disabled.intersection(applied)):
             raise RuntimeError(f"Patch result does not match the requested variant: {filename}")
@@ -449,13 +452,13 @@ def build(apk_id: str):
                 required = ["assets/haiagaru/image-moderation/model.onnx"]
                 required += [f"lib/{abi}/{name}" for abi in ("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
                              for name in ("libonnxruntime.so", "libonnxruntime4j_jni.so")]
+                required += [f"lib/{abi}/libgojni.so" for abi in
+                             ("arm64-v8a", "armeabi-v7a", "x86", "x86_64")]
                 if apk_id == "191":
                     required.append("assets/haiagaru/image-ng-runtime-fixed")
                 for name in required:
                     if name not in archive.namelist():
                         raise RuntimeError(f"Required library/model marker missing: {name}")
-            elif "assets/haiagaru/image-moderation/model.onnx" in archive.namelist():
-                raise RuntimeError("Image detection model unexpectedly bundled in a plain variant")
         artifacts.append({"file": filename, "sha256": sha256(target), "variant": variant,
                           "patches": expected_patches,
                           "libraries": library_state["assets"] if active_libraries else [],
@@ -490,17 +493,15 @@ def publish():
     notes = OUT / "release-notes.md"
     trigger_note = (f"Update requested: {plan['issue_request']['url']}\n\n"
                     if "issue_request" in plan else "")
-    library_note = ("Image detection variants have `image-detection` in their filename. "
-                    "These additional variants bundle the image detection model/runtime from the same upstream release. "
-                    "ChMate 191 image-detection variants also include the Image NG runtime fix. "
-                    "Image detection requires Android 7.0 (API 24) or newer and is enabled in Haiagaru settings. "
-                    "The original variants do not bundle the model/runtime.\n\n" if plan.get("libraries") else "")
+    library_note = ("Every APK includes enabled image detection and image VPN patches with matching model/runtime libraries. "
+                    "ChMate 191 also includes the Image NG runtime fix. "
+                    "These features require Android 7.0 (API 24) or newer.\n\n")
     notes.write_text(f"# ChatMate's · Haiagaru {plan['upstream_tag']}\n\n"
         f"Upstream: {plan['upstream_url']}\n\nChannel: **{plan['channel']}**\n\n"
         f"{trigger_note}"
         f"{library_note}"
         "Crash log saving is included in every APK (Download/Haiagaru); crash/ANR log sending follows the in-app consent setting. "
-        "Variants ending in `-video-viewer.apk` include the dedicated video viewer; other variants do not. "
+        "Shizuku, MEGA, and the dedicated video viewer are enabled in every APK. "
         f"This release contains {len(CONFIG['apks']) * len(build_variants(plan))} APKs.\n\n"
         "ChMate: 0.8.10.191 dev / 0.8.10.226 dev / 0.8.10.242 dev.\n\n"
         f"{variant_table(plan)}"

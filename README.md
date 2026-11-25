@@ -7,32 +7,11 @@ ChMate に [Haiagaru](https://github.com/areteruhiro/Haiagaru-Morphe) を適用�
 
 ## ダウンロード
 
-[Releases](https://github.com/Haiagaru/chatmates-builder/releases) から ChMate の版と構成を選びます。
+[Releases](https://github.com/Haiagaru/chatmates-builder/releases) から ChMate の版を選びます。191／226／242 dev の各版につき、ll-enabled.apk を1本ずつ公開します（計3 APK）。
 
-| Variant（ファイル末尾） | Shizuku | MEGA | 画像判定モデル・実行ライブラリ | 動画専用ビューア | クラッシュログ |
-|---|---|---|---|---|---|
-| `plain.apk` | なし | なし | なし | なし | あり |
-| `shizuku.apk` | あり | なし | なし | なし | あり |
-| `mega.apk` | なし | あり | なし | なし | あり |
-| `shizuku-mega.apk` | あり | あり | なし | なし | あり |
-| `plain-image-detection.apk` | なし | なし | あり | なし | あり |
-| `shizuku-image-detection.apk` | あり | なし | あり | なし | あり |
-| `mega-image-detection.apk` | なし | あり | あり | なし | あり |
-| `shizuku-mega-image-detection.apk` | あり | あり | あり | なし | あり |
-| `plain-video-viewer.apk` | なし | なし | なし | あり | あり |
-| `shizuku-video-viewer.apk` | あり | なし | なし | あり | あり |
-| `mega-video-viewer.apk` | なし | あり | なし | あり | あり |
-| `shizuku-mega-video-viewer.apk` | あり | あり | なし | あり | あり |
-| `plain-image-detection-video-viewer.apk` | なし | なし | あり | あり | あり |
-| `shizuku-image-detection-video-viewer.apk` | あり | なし | あり | あり | あり |
-| `mega-image-detection-video-viewer.apk` | なし | あり | あり | あり | あり |
-| `shizuku-mega-image-detection-video-viewer.apk` | あり | あり | あり | あり | あり |
+全APKで Shizuku、MEGA、画像判定モデル・実行ライブラリ、画像取得専用VPN、動画専用ビューア、クラッシュログ保存を有効にします。191にはImage NG修正ライブラリも組み込みます。機能の利用には Android 7.0（API 24）以上が必要です。クラッシュ・ANRログの送信はアプリ内の同意設定に従います。
 
-対象は `0.8.10.191 dev`、`0.8.10.226 dev`、`0.8.10.242 dev`。画像判定ライブラリを配布するReleaseでは、各版16構成、計48 APKを生成します。クラッシュログ保存は全APKで有効です。Haiagaru 1.49.0以降はメインPatchに統合され、それ以前の版では個別Patchを有効化します。クラッシュ・ANRログの送信はアプリ内の同意設定に従います。ライブラリを配布しない旧Releaseは画像判定なしの計24 APKです。
-
-画像判定あり版のファイル末尾は `-image-detection.apk` です。「成人向け・グロ画像の自動検出」のモデルと実行ライブラリを収録し、191には対応するImage NG修正も含みます。画像判定には **Android 7.0（API 24）以上**が必要で、アプリ内のHaiagaru設定から有効化します。画像判定なし版にはモデルとONNX実行ライブラリを含めません。VPNパッチは今回の追加構成には含めません。
-
-ビルド時は、MPPと**同じRelease**のZIPを毎回取得します。`haiagaru-image-moderation-vpn.zip` があれば画像判定用の内容を使用し、なければ `haiagaru-image-moderation.zip`、一括画像判定ZIPもなければモデル・実行ライブラリ・191用修正の個別ZIPを使用します。取得したZIPのSHA-256を照合し、配布URLとハッシュを `build-*.json` に記録します。必要なファイルが不足していれば公開を止め、次の定期実行で再試行します。
+ライブラリはMPPと同じ上流Releaseから取得します。画像判定・VPNの一括ZIPがあれば両パッチに指定し、191用Image NG修正ZIPも取得します。一括ZIPがなければ個別ZIPを使用します。SHA-256を照合し、配布URLとハッシュを uild-*.json に記録します。必要なファイルが不足したReleaseは公開しません。
 
 - アプリ表示名: **ChatMate's**
 - Android パッケージID: `io.github.haiagaru.chatmates`

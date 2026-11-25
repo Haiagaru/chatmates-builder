@@ -75,13 +75,13 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: Download matching image detection model and runtime
+      - name: Download matching image detection, VPN, and Image NG libraries
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_JSON: ${{ toJSON(matrix.release) }}
           APK_ID: ${{ matrix.apk_id }}
         run: python scripts/builder.py prepare-libraries --apk-id "$APK_ID"
-      - name: Build variants with crash logs and optional Shizuku, MEGA, image detection and video viewer
+      - name: Build all-enabled APKs with crash logs, Shizuku, MEGA, image detection, VPN, and video viewer
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_JSON: ${{ toJSON(matrix.release) }}
