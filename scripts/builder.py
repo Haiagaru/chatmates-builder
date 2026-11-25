@@ -190,7 +190,7 @@ def select_library_assets(release: dict) -> dict:
 
 LIBRARY_PATCHES = {
     "moderation": "成人向け・グロ画像の自動検出",
-    "vpn": "画像取得専用VPN（追加用・有効切替）",
+    "vpn": "画像取得専用VPN（実験用・検証中）",
 }
 
 
